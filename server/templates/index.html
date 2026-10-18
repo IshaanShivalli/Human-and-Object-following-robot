@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Rover AI Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background: #222; color: #fff; margin: 0; padding: 20px; }
+        h1 { margin-bottom: 10px; }
+        .stream-container { margin: 20px auto; max-width: 640px; border: 3px solid #444; border-radius: 8px; overflow: hidden; background: #000; }
+        img { width: 100%; height: auto; display: block; }
+        .controls { margin-top: 20px; }
+        button, input { padding: 12px 20px; font-size: 16px; margin: 5px; border-radius: 5px; border: none; cursor: pointer; }
+        button { background: #007bff; color: white; }
+        button:hover { background: #0056b3; }
+        button.stop { background: #dc3545; }
+        button.stop:hover { background: #a71d2a; }
+        input[type="text"] { width: 200px; cursor: text; }
+        .status { margin-top: 15px; font-size: 18px; color: #ffc107; }
+        button.active { background: #ffc107; color: #000; font-weight: bold; }
+        #state { margin-top: 10px; font-size: 20px; font-weight: bold; padding: 8px; border-radius: 6px; display: inline-block; min-width: 260px; background: #333; }
+        #state.searching, #state.approaching, #state.following { background: #0d6efd; }
+        #state.found { background: #198754; }
+    </style>
+</head>
+<body>
+    <h1>Rover AI Control Panel</h1>
+    <div class="status" style="font-size:14px;color:#aaa">Camera <span id="cfps">--</span> fps &middot; AI <span id="afps">--</span> fps</div>
+    <div class="status" id="diag" style="font-size:14px;color:#8bc34a">model: --</div>
+    <div id="state">Idle</div>
+
+    <div class="stream-container">
+        <img src="{{ url_for('video_feed') }}" alt="Live Feed">
+    </div>
+
+    <div class="controls">
+        <button onclick="sendCmd('follow')">Follow Person</button>
+        <button class="stop" onclick="sendCmd('stop')">Stop</button>
+        <br><br>
+        <input type="text" id="targetObj" list="objs" placeholder="e.g. bottle, laptop"
+               onkeydown="if(event.key==='Enter') findObject()">
+        <datalist id="objs">
+            {% for n in names %}<option value="{{ n }}">{% endfor %}
+        </datalist>
+        <button onclick="findObject()">Find Object</button>
+    </div>
+
+    <script>
+        function sendCmd(cmd) {
+            return fetch('/command', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({command: cmd})
+            }).then(r => r.json()).then(d => {
+                if (d.status === 'error') alert(d.message);
+            });
+        }
+
+        function findObject() {
+            const obj = document.getElementById('targetObj').value.trim();
+            if (obj) sendCmd('find ' + obj);
+        }
+
+        setInterval(() => {
+            fetch('/status').then(r => r.json()).then(d => {
+                const s = document.getElementById('state');
+                s.innerText = d.msg;
+                s.className = d.mode;
+                document.getElementById('cfps').innerText = d.cam_fps;
+                document.getElementById('afps').innerText = d.ai_fps;
+                const g = d.diag;
+                document.getElementById('diag').innerText = 'model: ' + g.model + ' | boxes: ' + g.n +
+                    ' | best guess: ' + g.raw_label + ' ' + g.raw_max.toFixed(2) + ' | sonar: ' + (d.dist === null ? '--' : d.dist + ' cm') + (g.err ? ' | ERROR: ' + g.err : '');
+            }).catch(() => {});
+        }, 500);
+    </script>
+</body>
+</html>
